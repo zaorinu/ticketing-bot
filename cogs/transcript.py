@@ -35,7 +35,6 @@ class TranscriptCog(commands.Cog):
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(transcript_text)
 
-        # Envia para canal de log
         log_channel = interaction.guild.get_channel(self.log_channel_id)
         if log_channel:
             await log_channel.send(

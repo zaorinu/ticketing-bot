@@ -3,42 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 import os
-
-class TicketButtons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="Open Ticket", custom_id="open_ticket", style=discord.ButtonStyle.primary))
-
-class CloseTicketModal(discord.ui.Modal, title="Close Ticket"):
-    reason = discord.ui.TextInput(
-        label="Reason",
-        placeholder="Why are you closing this ticket?",
-        style=discord.TextStyle.paragraph,
-        required=True
-    )
-
-    def __init__(self, cog, interaction: discord.Interaction):
-        super().__init__()
-        self.cog = cog
-        self.interaction = interaction
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Closing ticket...", ephemeral=True)
-        await self.cog.close_ticket(self.interaction, self.reason.value)
-
-class TicketActions(discord.ui.View):
-    def __init__(self, cog):
-        super().__init__(timeout=None)
-        self.cog = cog
-
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id="close_ticket")
-    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CloseTicketModal(self.cog, interaction))
-
-    @discord.ui.button(label="Save", style=discord.ButtonStyle.secondary, custom_id="save_transcript")
-    async def transcript_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
-        await self.cog.send_transcript(interaction, manual=True)
+from cogs.buttons import TicketButtons, TicketActions
 
 class TicketCog(commands.Cog):
     def __init__(self, bot):
@@ -52,7 +17,6 @@ class TicketCog(commands.Cog):
         channel = guild.get_channel(self.ticket_channel_id)
         if not channel:
             return False
-
         threads = channel.threads
         return any(thread.name == str(user_id) for thread in threads)
 
@@ -63,7 +27,7 @@ class TicketCog(commands.Cog):
             description="Click the button below to open a private support ticket.",
             color=0x2b2d31
         )
-        await interaction.response.send_message(embed=embed, view=TicketButtons(), ephemeral=False)
+        await interaction.response.send_message(embed=embed, view=TicketButtons(self), ephemeral=False)
 
     async def create_ticket(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -150,7 +114,7 @@ class TicketCog(commands.Cog):
         await interaction.channel.send("This ticket has been closed.")
         await interaction.channel.edit(archived=True, locked=True)
 
-    async def send_transcript(self, interaction: discord.Interaction, manual=False):
+    async def send_transcript_followup(self, interaction: discord.Interaction, manual=False):
         messages = [msg async for msg in interaction.channel.history(oldest_first=True, limit=100)]
         log_lines = []
         for msg in messages:
@@ -172,11 +136,6 @@ class TicketCog(commands.Cog):
         await interaction.followup.send("Transcript saved:", file=discord.File(file_name), ephemeral=True)
         os.remove(file_name)
 
-    @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        if interaction.type == discord.InteractionType.component and interaction.data.get("custom_id") == "open_ticket":
-            await self.create_ticket(interaction)
-
     async def cog_load(self):
         guild = discord.Object(id=self.guild_id)
         self.bot.tree.add_command(self.panel, guild=guild)
@@ -184,5 +143,5 @@ class TicketCog(commands.Cog):
 async def setup(bot):
     cog = TicketCog(bot)
     await bot.add_cog(cog)
-    bot.add_view(TicketButtons())
+    bot.add_view(TicketButtons(cog))
     bot.add_view(TicketActions(cog))
